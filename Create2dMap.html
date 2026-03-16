@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Editor Gambar - Transparan PNG</title>
+<style>
+    body { margin:0; font-family:sans-serif; background:#2c2c2c; display:flex; flex-direction:column; align-items:center; overflow: hidden; height: 100vh; color: white; }
+    #toolbar { background:#3a3a3a; padding:15px; border-radius:8px; margin-top:10px; box-shadow:0 2px 10px rgba(0,0,0,0.5); width:90%; max-width:500px; z-index: 10; }
+    #toolgrid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:10px; }
+    .toolbtn { height:45px; border-radius:10px; border:1px solid #555; background:#4a4a4a; font-size:20px; display:flex; align-items:center; justify-content:center; cursor:pointer; color: white; }
+    .toolbtn.active { background:#ff3b3b; color:white; border-color:#ff3b3b; }
+    #sizeBox { display:flex; gap:10px; margin-bottom:10px; align-items: center; justify-content: center; font-size: 12px; }
+    #sizeBox input { width:60px; padding:3px; background: #222; color: white; border: 1px solid #555; }
+    #sliderBox { display:flex; align-items:center; gap:10px; font-size: 12px; }
+    #brushSize { flex:1; }
+    
+    #canvasBox { 
+        flex: 1; 
+        width: 100%; 
+        position: relative; 
+        overflow: hidden; 
+        background: #1a1a1a; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+    }
+
+    /* Pola kotak-kotak untuk indikasi transparansi */
+    canvas { 
+        display: block; 
+        image-rendering: auto; 
+        cursor: crosshair; 
+        background-color: #ffffff;
+        background-image: linear-gradient(45deg, #e0e0e0 25%, transparent 25%), 
+                          linear-gradient(-45deg, #e0e0e0 25%, transparent 25%), 
+                          linear-gradient(45deg, transparent 75%, #e0e0e0 75%), 
+                          linear-gradient(-45deg, transparent 75%, #e0e0e0 75%);
+        background-size: 20px 20px;
+        background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+    }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+    <div id="toolgrid">
+        <div class="toolbtn" onclick="newCanvas()" title="New">📐</div>
+        <div class="toolbtn" onclick="loadImage()" title="Import Image">🖼️</div>
+        <div class="toolbtn" onclick="loadBrush()" title="Load Brush">🎨</div>
+        <div class="toolbtn" id="btnDraw" onclick="setMode('draw')" title="Draw">✏️</div>
+        <div class="toolbtn active" id="btnMove" onclick="setMode('move')" title="Move/Zoom">✋</div>
+        <div class="toolbtn" onclick="undo()" title="Undo">↩️</div>
+        <div class="toolbtn" onclick="redo()" title="Redo">↪️</div>
+        <div class="toolbtn" onclick="savePNG()" title="Save PNG">💾</div>
+    </div>
+    <div id="sizeBox">
+        W:<input id="canvasW" type="number" value="800">
+        H:<input id="canvasH" type="number" value="800">
+        <span>Zoom: <span id="zoomVal">100</span>%</span>
+    </div>
+    <div id="sliderBox">
+        Brush:
+        <input type="range" id="brushSize" min="10" max="1000" value="50">
+        <span id="brushSizeVal">50</span>
+    </div>
+</div>
+
+<div id="canvasBox">
+    <canvas id="viewCanvas"></canvas>
+</div>
+
+<input type="file" id="imageInput" accept="image/*" hidden>
+<input type="file" id="brushInput" accept="image/*" hidden>
+
+<script>
+const canvas = document.getElementById("viewCanvas");
+const ctx = canvas.getContext("2d");
+const zoomValLabel = document.getElementById("zoomVal");
+const brushSlider = document.getElementById("brushSize");
+const brushSizeVal = document.getElementById("brushSizeVal");
+
+let brushSizeValue = parseFloat(brushSlider.value);
+brushSlider.addEventListener("input", () => {
+    brushSizeValue = parseFloat(brushSlider.value);
+    brushSizeVal.textContent = brushSizeValue;
+});
+
+let drawCanvas = document.createElement("canvas");
+let drawCtx = drawCanvas.getContext("2d");
+let baseImage = null;
+
+let brush = null;
+let mode = "move";
+let strokes = [], redoStack = [];
+let currentStroke = null;
+
+let scale = 1.0;
+let offsetX = 50, offsetY = 50;
+
+let isDragging = false;
+let isTouchMode = false;
+let lastX, lastY; 
+let lastBrushX, lastBrushY; 
+let initialPinchDist = null;
+let initialScale = 1.0;
+
+function init() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    newCanvas();
+}
+
+function applySmoothing(c) {
+    c.imageSmoothingEnabled = true;
+    c.imageSmoothingQuality = "high";
+}
+
+function drawScene() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
+
+    // BACKGROUND PUTIH DIHAPUS agar transparan
+    ctx.drawImage(drawCanvas, 0, 0);
+
+    // Border canvas untuk membantu penglihatan
+    ctx.strokeStyle = "rgba(0,0,0,0.3)";
+    ctx.lineWidth = 1 / scale;
+    ctx.strokeRect(0, 0, drawCanvas.width, drawCanvas.height);
+
+    ctx.restore();
+    zoomValLabel.innerText = Math.round(scale * 100);
+}
+
+function getInternalPos(x, y) {
+    let rect = canvas.getBoundingClientRect();
+    return {
+        ix: (x - rect.left - offsetX) / scale,
+        iy: (y - rect.top - offsetY) / scale
+    };
+}
+
+// TOUCH EVENTS
+canvas.addEventListener("touchstart", e => {
+    isTouchMode = true;
+    if (e.touches.length === 2) {
+        initialPinchDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+        initialScale = scale;
+    } else {
+        startAction(e.touches[0].pageX, e.touches[0].pageY);
+    }
+    e.preventDefault(); 
+}, {passive: false});
+
+canvas.addEventListener("touchmove", e => {
+    if (e.touches.length === 2) {
+        let dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+        scale = Math.max(0.1, Math.min(10, initialScale * (dist / initialPinchDist)));
+        drawScene();
+    } else {
+        moveAction(e.touches[0].pageX, e.touches[0].pageY);
+    }
+    e.preventDefault();
+}, {passive: false});
+
+canvas.addEventListener("touchend", e => {
+    endAction();
+    e.preventDefault();
+}, {passive: false});
+
+// MOUSE EVENTS
+canvas.addEventListener("mousedown", e => {
+    if (isTouchMode) return;
+    startAction(e.pageX, e.pageY);
+});
+
+window.addEventListener("mousemove", e => {
+    if (isTouchMode || !isDragging) return;
+    moveAction(e.pageX, e.pageY);
+});
+
+window.addEventListener("mouseup", e => {
+    if (isTouchMode) return;
+    endAction();
+});
+
+function startAction(x, y) {
+    isDragging = true;
+    let pos = getInternalPos(x, y);
+    lastX = x; lastY = y;
+
+    if (mode === "draw" && brush) {
+        currentStroke = { brush: brush, points: [] };
+        addBrush(pos.ix, pos.iy);
+        lastBrushX = pos.ix;
+        lastBrushY = pos.iy;
+    }
+}
+
+function moveAction(x, y) {
+    if (!isDragging) return;
+    if (mode === "move") {
+        offsetX += (x - lastX);
+        offsetY += (y - lastY);
+        lastX = x; lastY = y;
+        drawScene();
+    } else if (mode === "draw" && brush && currentStroke) {
+        let pos = getInternalPos(x, y);
+        let dist = Math.hypot(pos.ix - lastBrushX, pos.iy - lastBrushY);
+        let spacing = brushSizeValue / 5;
+        if (dist > spacing) {
+            addBrush(pos.ix, pos.iy);
+            lastBrushX = pos.ix;
+            lastBrushY = pos.iy;
+        }
+    }
+}
+
+function endAction() {
+    if (!isDragging) return;
+    isDragging = false;
+    if (currentStroke && currentStroke.points.length > 0) {
+        strokes.push(currentStroke);
+        redoStack = [];
+    }
+    currentStroke = null;
+}
+
+function addBrush(ix, iy) {
+    let size = brushSizeValue;
+    let ratio = brush.width / brush.height;
+    let drawW = ratio > 1 ? size : size * ratio;
+    let drawH = ratio > 1 ? size / ratio : size;
+
+    drawCtx.drawImage(brush, ix - drawW/2, iy - drawH/2, drawW, drawH);
+    currentStroke.points.push({ x: ix, y: iy, w: drawW, h: drawH });
+    drawScene();
+}
+
+function undo() {
+    if (strokes.length > 0) {
+        redoStack.push(strokes.pop());
+        rebuild();
+    }
+}
+
+function redo() {
+    if (redoStack.length > 0) {
+        strokes.push(redoStack.pop());
+        rebuild();
+    }
+}
+
+function rebuild() {
+    drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    applySmoothing(drawCtx);
+    if (baseImage) drawCtx.drawImage(baseImage, 0, 0, drawCanvas.width, drawCanvas.height);
+    for (let s of strokes) {
+        for (let p of s.points) {
+            drawCtx.drawImage(s.brush, p.x - p.w/2, p.y - p.h/2, p.w, p.h);
+        }
+    }
+    drawScene();
+}
+
+function setMode(m) {
+    mode = m;
+    document.getElementById("btnDraw").classList.toggle("active", m === "draw");
+    document.getElementById("btnMove").classList.toggle("active", m === "move");
+}
+
+function newCanvas() {
+    drawCanvas.width = parseInt(document.getElementById("canvasW").value);
+    drawCanvas.height = parseInt(document.getElementById("canvasH").value);
+    drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height); // Pastikan bersih/transparan
+    baseImage = null; strokes = []; redoStack = [];
+    applySmoothing(drawCtx);
+    drawScene();
+}
+
+function loadImage() { document.getElementById("imageInput").click(); }
+document.getElementById("imageInput").onchange = e => {
+    let reader = new FileReader();
+    reader.onload = ev => {
+        let img = new Image();
+        img.onload = () => {
+            baseImage = img;
+            document.getElementById("canvasW").value = img.width;
+            document.getElementById("canvasH").value = img.height;
+            drawCanvas.width = img.width;
+            drawCanvas.height = img.height;
+            rebuild();
+        };
+        img.src = ev.target.result;
+    };
+    reader.readAsDataURL(e.target.files[0]);
+};
+
+function loadBrush() { document.getElementById("brushInput").click(); }
+document.getElementById("brushInput").onchange = e => {
+    let reader = new FileReader();
+    reader.onload = ev => {
+        let img = new Image();
+        img.onload = () => { brush = img; setMode('draw'); };
+        img.src = ev.target.result;
+    };
+    reader.readAsDataURL(e.target.files[0]);
+};
+
+function savePNG() {
+    // Menyimpan apa adanya (Transparan akan tetap transparan)
+    let link = document.createElement("a");
+    link.download = "hasil_transparan.png";
+    link.href = drawCanvas.toDataURL("image/png");
+    link.click();
+}
+
+window.onload = init;
+window.onresize = () => { 
+    canvas.width = window.innerWidth; 
+    canvas.height = window.innerHeight; 
+    drawScene(); 
+};
+</script>
+</body>
+</html>
