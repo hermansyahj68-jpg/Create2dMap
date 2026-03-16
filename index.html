@@ -3,6 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+     <!-- ICON -->
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#121212">
+
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+ 
 <title>Editor Gambar - Transparan PNG</title>
 <style>
     body { margin:0; font-family:sans-serif; background:#2c2c2c; display:flex; flex-direction:column; align-items:center; overflow: hidden; height: 100vh; color: white; }
@@ -324,5 +335,15 @@ window.onresize = () => {
     drawScene(); 
 };
 </script>
+    <script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('service-worker.js')
+  .then(function(reg){
+    console.log("Service Worker aktif", reg);
+  }).catch(function(err){
+    console.log("Service Worker gagal", err);
+  });
+}
+    </script>
 </body>
 </html>
