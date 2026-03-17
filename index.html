@@ -142,6 +142,10 @@ function drawScene() {
     ctx.drawImage(drawCanvas, 0, 0);
 
     // Garis bantu tepi canvas
+       ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+    ctx.drawImage(drawCanvas, 0, 0);
+       
     ctx.strokeStyle = "rgba(0,0,0)";
     ctx.lineWidth = 2 / scale;
     ctx.strokeRect(0, 0, drawCanvas.width, drawCanvas.height);
