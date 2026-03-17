@@ -3,8 +3,8 @@ const CACHE_NAME = "Create2dMap-v1";
 const urlsToCache = [
   "./",
   "./index.html",
-  "./icon.png",
-  "./manifest.json
+  "./icon.png"
+  
 ];
 
 self.addEventListener("install", function(event) {
