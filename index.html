@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-      <!-- ICON -->
-<link rel="icon" href="icon.jpg">
-<link rel="apple-touch-icon" href="icon.jpg">
+       <!-- ICON -->
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -65,12 +65,12 @@
     </div>
 
     <div class="control-row">
-        UkuranBrush: <input type="range" id="brushSize" min="10" max="1000" value="50">
+        Ukuran: <input type="range" id="brushSize" min="10" max="1000" value="50">
         <span id="brushSizeVal">50</span>
     </div>
 
     <div class="control-row">
-        KepadatanBrush: <input type="range" id="densitySlider" min="1" max="100" value="20">
+        Kepadatan: <input type="range" id="densitySlider" min="1" max="100" value="20">
         <span id="densityVal">20</span>
     </div>
 </div>
@@ -142,8 +142,8 @@ function drawScene() {
     ctx.drawImage(drawCanvas, 0, 0);
 
     // Garis bantu tepi canvas
-    ctx.strokeStyle = "rgba(0,0,0,0.2)";
-    ctx.lineWidth = 1 / scale;
+    ctx.strokeStyle = "rgba(0,0,0)";
+    ctx.lineWidth = 2 / scale;
     ctx.strokeRect(0, 0, drawCanvas.width, drawCanvas.height);
 
     ctx.restore();
@@ -330,7 +330,7 @@ function loop() {
 window.onload = init;
 window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
 </script>
-     <script>
+      <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('service-worker.js')
   .then(function(reg){
@@ -339,6 +339,6 @@ if ('serviceWorker' in navigator) {
     console.log("Service Worker gagal", err);
   });
 }
-     </script>
+      </script>
 </body>
 </html>
